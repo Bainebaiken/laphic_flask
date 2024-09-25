@@ -1,1 +1,1 @@
-export FLASK_APP=authors_app
+export FLASK_APP=invix_app
