@@ -1,1 +1,1 @@
-web: gunicorn invix_app:app
+web: gunicorn run:app
