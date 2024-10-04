@@ -2,6 +2,7 @@ from invix_app import create_app
 from flask import Flask
 from flask_cors import CORS
 
+app = Flask(__name__)
 
 app = create_app()
 UPLOAD_FOLDER = 'uploads'
@@ -14,7 +15,7 @@ UPLOAD_FOLDER = 'uploads'
 
 
 
-# app = Flask(__name__)
+
 CORS(app)  # This enables CORS for all routes and all origins
 
 @app.route('/api/v1/articles/')
