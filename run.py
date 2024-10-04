@@ -6,6 +6,7 @@ from flask_cors import CORS
 
 app = create_app()
 UPLOAD_FOLDER = 'uploads'
+# Formamily
 # app.config['UPLOAD_FOLDER'] = 'uploads'
 
 # CORS(app) 
