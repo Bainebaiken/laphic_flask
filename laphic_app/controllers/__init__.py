@@ -1,0 +1,1 @@
+from laphic_app.extensions import db

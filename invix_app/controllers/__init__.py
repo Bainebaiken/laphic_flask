@@ -1,1 +1,0 @@
-from invix_app.extensions import db
