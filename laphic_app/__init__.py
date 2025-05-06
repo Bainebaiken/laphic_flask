@@ -67,6 +67,7 @@ from laphic_app.controllers.service_controller import service_bp
 from laphic_app.controllers.feedback_controller import feedback_bp
 from laphic_app.controllers.message_controller import message_bp
 from laphic_app.controllers.gallery_controller import gallery_bp
+from laphic_app.controllers.notification_controller import notifications_bp
 from laphic_app.models.user import User
 from laphic_app.models.service import Service
 from laphic_app.models.provider import Provider
@@ -74,6 +75,7 @@ from laphic_app.models.Booking import Booking
 from laphic_app.models.feedback import Feedback
 from laphic_app.models.message import Message
 from laphic_app.models.gallery import Gallery
+from laphic_app.models.notification import Notification
 
 # Initialize SocketIO
 socketio = SocketIO(cors_allowed_origins="*")  # Enable CORS for WebSocket testing
@@ -89,6 +91,9 @@ def create_app():
     jwt.init_app(app)
     socketio.init_app(app)  # Initialize WebSocket functionality
 
+    # Consolidated CORS configuration
+    CORS(app, resources={r"/*": {"origins": ["http://localhost:*"]}})  # Allow all endpoints from localhost
+
     # Register blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(provider_bp)
@@ -97,9 +102,11 @@ def create_app():
     app.register_blueprint(message_bp)
     app.register_blueprint(feedback_bp)
     app.register_blueprint(gallery_bp)
+    app.register_blueprint(notifications_bp)
 
-    # Enable CORS for REST API requests
-    CORS(app)
+    # Create database tables (optional, run once or on first start)
+    with app.app_context():
+        db.create_all()
 
     return app
 

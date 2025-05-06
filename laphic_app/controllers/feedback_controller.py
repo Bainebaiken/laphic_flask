@@ -1,229 +1,108 @@
 from flask import Blueprint, request, jsonify
 from laphic_app.extensions import db
-from laphic_app.models import Feedback  # Ensure Feedback is imported correctly (uppercase)
+from laphic_app.models import Feedback
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from datetime import datetime
+from functools import wraps
+import re
 
-# Define a Blueprint for feedbacks-related routes
-feedback_bp = Blueprint('feedbacks', __name__, url_prefix='/api/v1/feedbacks')  # Adjusted Blueprint definition
+# Define a Blueprint for feedback-related routes
+feedback_bp = Blueprint('feedback', __name__, url_prefix='/api/v1/feedback')
 
-# Create a new feedback
-@feedback_bp.route('/register', methods=['POST'])
-def create_feedback():
+# Admin or Superadmin required decorator
+def admin_or_superadmin_required(fn):
+    @wraps(fn)
+    @jwt_required()
+    def wrapper(*args, **kwargs):
+        user_info = get_jwt_identity()
+        if user_info['role'] not in ['admin', 'superadmin']:
+            return jsonify({'error': 'Admin or Superadmin access required'}), 403
+        return fn(*args, **kwargs)
+    return wrapper
+
+# Submit feedback (Public access)
+@feedback_bp.route('/submit', methods=['POST'])
+def submit_feedback():
     try:
         data = request.get_json()
-        User_ID = data.get('User_ID')
-        Rating = data.get('Rating')
-        Comment = data.get('Comment')
-        Feedback_Date = data.get('Feedback_Date')
+        required_fields = ['userId', 'name', 'email', 'comments', 'rating']
+        if not all(key in data for key in required_fields):
+            return jsonify({'error': 'Missing required fields: userId, name, email, comments, rating'}), 400
 
-        # Create the Feedback instance
-        new_feedback = Feedback(
-            User_ID=User_ID, 
-            Rating=Rating, 
-            Comment=Comment,
-            Feedback_Date=datetime.fromisoformat(Feedback_Date) if Feedback_Date else None
+        user_id = data['userId']
+        name = data['name']
+        email = data['email']
+        comments = data['comments']
+        rating = data['rating']
+        image_url = data.get('imageUrl')
+
+        # Validate inputs
+        if not isinstance(rating, int) or rating < 1 or rating > 5:
+            return jsonify({'error': 'Rating must be an integer between 1 and 5'}), 400
+        if len(comments) > 500:
+            return jsonify({'error': 'Comments must be 500 characters or less'}), 400
+        if len(name) > 100 or len(email) > 100:
+            return jsonify({'error': 'Name and email must be 100 characters or less'}), 400
+        if not re.match(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$', email):
+            return jsonify({'error': 'Invalid email format'}), 400
+
+        feedback = Feedback(
+            user_id=user_id,
+            name=name,
+            email=email,
+            comment=comments,
+            rating=rating,
+            image_url=image_url
         )
-
-        db.session.add(new_feedback)
+        db.session.add(feedback)
         db.session.commit()
 
-        return jsonify({'feedback': 'Feedback created successfully', 'Feedback_ID': new_feedback.Feedback_ID}), 201
-
+        return jsonify({'message': 'Feedback submitted successfully'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'feedback': 'Failed to create feedback', 'error': str(e)}), 500
+        return jsonify({'error': 'Failed to submit feedback', 'details': str(e)}), 500
 
-# Get all feedbacks
-@feedback_bp.route('/', methods=['GET'])
-def get_all_feedbacks():
+# Get feedback history for a user (User or Admin/Superadmin)
+@feedback_bp.route('/history/<user_id>', methods=['GET'])
+@jwt_required()
+def get_feedback_history(user_id):
     try:
-        feedbacks = Feedback.query.all()  # Corrected to use Feedback model
-        feedbacks_list = []
-        for feedback in feedbacks:
-            feedbacks_list.append({
-                'Feedback_ID': feedback.Feedback_ID,
-                'User_ID': feedback.User_ID,
-                'Rating': feedback.Rating,
-                'Comment': feedback.Comment,
-                'Feedback_Date': feedback.Feedback_Date.strftime('%Y-%m-%d %H:%M:%S') if feedback.Feedback_Date else None
-            })
-        return jsonify(feedbacks_list), 200
+        current_user = get_jwt_identity()
+        # Allow access if user_id matches JWT identity or user is admin/superadmin
+        if current_user['user_id'] != user_id and current_user['role'] not in ['admin', 'superadmin']:
+            return jsonify({'error': 'Unauthorized access to feedback history'}), 403
 
+        feedback_list = Feedback.query.filter_by(user_id=user_id).all()
+        return jsonify([
+            {
+                'id': f.feedback_id,
+                'name': f.name,
+                'email': f.email,
+                'comments': f.comment,
+                'rating': f.rating,
+                'imageUrl': f.image_url,
+                'timestamp': f.feedback_date.isoformat()
+            } for f in feedback_list
+        ]), 200
     except Exception as e:
-        return jsonify({'feedback': 'Failed to retrieve feedbacks', 'error': str(e)}), 500
+        return jsonify({'error': 'Failed to retrieve feedback history', 'details': str(e)}), 500
 
-# Get a single feedback by ID
-@feedback_bp.route('/<int:id>', methods=['GET'])
-def get_feedback(id):
+# Get all feedback (Admin/Superadmin only)
+@feedback_bp.route('/all', methods=['GET'])
+@admin_or_superadmin_required
+def get_all_feedback():
     try:
-        feedback = Feedback.query.get(id)  # Corrected to use Feedback model
-        if not feedback:
-            return jsonify({'feedback': 'Feedback not found'}), 404
-
-        return jsonify({
-            'Feedback_ID': feedback.Feedback_ID,
-            'User_ID': feedback.User_ID,
-            'Rating': feedback.Rating,
-            'Comment': feedback.Comment,
-            'Feedback_Date': feedback.Feedback_Date.strftime('%Y-%m-%d %H:%M:%S') if feedback.Feedback_Date else None
-        }), 200
-
+        feedback_list = Feedback.query.all()
+        return jsonify([
+            {
+                'id': f.feedback_id,
+                'user_id': f.user_id,
+                'name': f.name,
+                'email': f.email,
+                'comments': f.comment,
+                'rating': f.rating,
+                'imageUrl': f.image_url,
+                'timestamp': f.feedback_date.isoformat()
+            } for f in feedback_list
+        ]), 200
     except Exception as e:
-        return jsonify({'feedback': 'Failed to retrieve feedback', 'error': str(e)}), 500
-
-# Update a feedback by ID
-@feedback_bp.route('/<int:id>', methods=['PUT'])
-def update_feedback(id):
-    try:
-        data = request.get_json()
-        feedback = Feedback.query.get(id)
-        if not feedback:
-            return jsonify({'feedback': 'Feedback not found'}), 404
-
-        feedback.User_ID = data.get('User_ID', feedback.User_ID)
-        feedback.Rating = data.get('Rating', feedback.Rating)
-        feedback.Comment = data.get('Comment', feedback.Comment)
-        feedback.Feedback_Date = datetime.fromisoformat(data.get('Feedback_Date')) if data.get('Feedback_Date') else feedback.Feedback_Date
-        feedback.updated_at = datetime.now()
-
-        db.session.commit()
-        return jsonify({'feedback': 'Feedback updated successfully'}), 200
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'feedback': 'Failed to update feedback', 'error': str(e)}), 500
-
-# Delete a feedback by ID
-@feedback_bp.route('/<int:id>', methods=['DELETE'])
-def delete_feedback(id):
-    try:
-        feedback = Feedback.query.get(id)
-        if not feedback:
-            return jsonify({'feedback': 'Feedback not found'}), 404
-
-        db.session.delete(feedback)
-        db.session.commit()
-        return jsonify({'feedback': 'Feedback deleted successfully'}), 200
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'feedback': 'Failed to delete feedback', 'error': str(e)}), 500
-
-
-# from flask import Blueprint, request, jsonify
-# from laphic_app.extensions import db
-# from laphic_app.models import feedback  
-# from flask_jwt_extended import jwt_required, get_jwt_identity
-# from datetime import datetime
-
-# # Define a Blueprint for feedbacks-related routes
-# feedback_bp = Blueprint('feedbacks', __name__, url_prefix='/api/v1/feedbacks')  # Adjusted Blueprint definition
-
-
-
-
-# # Create a new feedbacks
-# @feedback_bp.route('/register', methods=['POST'])  
-# def create_feedback():
-#     try:
-#         data = request.get_json()
-#         Feedback_ID = data.get('Feedback_ID')
-#         User_ID = data.get('User_ID')
-#         Service_ID = data.get('Service_ID')
-#         Rating  = data.get('Rating ')
-#         Comment = data.get('Comment')
-#         Feedback_Date = data.get('Feedback_Date')
-
-
-
-#         new_message = feedback(Feedback_ID=Feedback_ID, User_ID=User_ID, Service_ID=Service_ID,
-#                         Rating =Rating , Comment=Comment,Feedback_Date=Feedback_Date)
-
-#         db.session.add(new_message)
-#         db.session.commit()
-
-#         return jsonify({'feedback': 'feedback created successfully', 'id': new_message.id}), 201
-
-#     except Exception as e:
-#         db.session.rollback()
-#         return jsonify({'feedback': 'Failed to create feedbacks', 'error': str(e)}), 500
-
-# # Get all feedbacks
-# @feedback_bp.route('/', methods=['GET'])
-# def get_all_feedbacks():
-#     try:
-#         feedbacks = feedback.query.all()
-#         feedbacks_list = []
-#         for feedbacks in feedbacks:
-#             feedbacks_list.append({
-#                 'id': feedbacks.id,
-#                 'Feedback_ID': feedbacks.Feedback_ID,
-#                 'User_ID': feedbacks.User_ID,
-#                 'Service_ID': feedbacks.Service_ID,
-#                 'created_at': feedbacks.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-#                 'updated_at': feedbacks.updated_at.strftime('%Y-%m-%d %H:%M:%S') if feedbacks.updated_at else None
-#             })
-#         return jsonify(feedbacks_list), 200
-
-#     except Exception as e:
-#         return jsonify({'feedback': 'Failed to retrieve feedbacks', 'error': str(e)}), 500
-
-# # Get a single feedbacks by ID
-# @feedback_bp.route('/<int:id>', methods=['GET'])
-# def get_feedback(id):
-#     try:
-#         feedbacks = feedback.query.get(id)
-#         if not feedbacks:
-#             return jsonify({'feedback': 'feedback not found'}), 404
-
-#         return jsonify({
-#             'id': feedbacks.id,
-#             'Feedback_ID': feedbacks.Feedback_ID,
-#             'User_ID': feedbacks.User_ID,
-#             'Service_ID': feedbacks.Service_ID,
-#             'created_at': feedbacks.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-#             'updated_at': feedbacks.updated_at.strftime('%Y-%m-%d %H:%M:%S') if feedbacks.updated_at else None
-#         }), 200
-
-#     except Exception as e:
-#         return jsonify({'feedback': 'Failed to retrieve feedbacks', 'error': str(e)}), 500
-
-# # Update a feedbacks by ID
-# @feedback_bp.route('/<int:id>', methods=['PUT'])
-# def update_feedback(id):
-#     try:
-#         data = request.get_json()
-#         feedbacks = feedback.query.get(id)
-#         if not feedbacks:
-#             return jsonify({'feedback': 'feedback not found'}), 404
-
-#         feedbacks.Feedback_ID = data.get('Feedback_ID', feedbacks.Feedback_ID)
-#         feedbacks.User_ID = data.get('User_ID', feedbacks.User_ID)
-#         feedbacks.Service_ID = data.get('Service_ID', feedbacks.Service_ID)
-#         feedbacks.message_sent = data.get('message_sent', feedbacks.message_sent)
-#         feedbacks.updated_at = datetime.now()
-
-#         db.session.commit()
-#         return jsonify({'feedback': 'feedback updated successfully'}), 200
-
-#     except Exception as e:
-#         db.session.rollback()
-#         return jsonify({'feedback': 'Failed to update feedbacks', 'error': str(e)}), 500
-
-# # Delete a feedbacks by ID
-# @feedback_bp.route('/<int:id>', methods=['DELETE'])
-# def delete_feedback(id):
-#     try:
-#         feedbacks = feedback.query.get(id)
-#         if not feedbacks:
-#             return jsonify({'feedback': 'feedback not found'}), 404
-
-#         db.session.delete(feedbacks)
-#         db.session.commit()
-#         return jsonify({'feedback': 'feedback deleted successfully'}), 200
-
-#     except Exception as e:
-#         db.session.rollback()
-#         return jsonify({'feedback': 'Failed to delete feedbacks', 'error': str(e)}), 500
-
+        return jsonify({'error': 'Failed to retrieve all feedback', 'details': str(e)}), 500

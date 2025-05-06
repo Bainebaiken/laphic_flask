@@ -2,16 +2,18 @@ from flask import Blueprint, request, jsonify
 from laphic_app.extensions import db, bcrypt, jwt
 from laphic_app.models.user import User
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_cors import CORS  # Add this
 import re
 from sqlalchemy.exc import SQLAlchemyError
 
 auth_bp = Blueprint("auth_bp", __name__, url_prefix="/auth")
+CORS(auth_bp, resources={r"/auth/*": {"origins": ["http://localhost:*"]}})  # Allow all localhost ports
 
-# User Registration
 @auth_bp.route("/register", methods=["POST"])
 def register():
     try:
         data = request.get_json()
+        print(f"Received request from {request.origin}: {data}")  # Enhanced debug log
         if not data:
             return jsonify({"error": "No data provided", "message": None}), 400
 
@@ -19,7 +21,6 @@ def register():
         if not all(field in data and data[field] for field in required_fields):
             return jsonify({"error": "All required fields (name, email, phone, password) must be filled", "message": None}), 400
 
-        # Basic input validation
         if not re.match(r"[^@]+@[^@]+\.[^@]+", data["email"]):
             return jsonify({"error": "Invalid email format", "message": None}), 400
         if not re.match(r"^\+?1?\d{9,15}$", data["phone"]):
@@ -27,13 +28,11 @@ def register():
         if len(data["password"]) < 8:
             return jsonify({"error": "Password must be at least 8 characters", "message": None}), 400
 
-        # Check for existing user
-        if User.query.filter_by(email=data["email"].lower()).first():  # Use lowercase 'email'
+        if User.query.filter_by(email=data["email"].lower()).first():
             return jsonify({"error": "Email is already registered", "message": None}), 400
 
-        # Default user_type to "user" if not provided, restrict privileged types
         user_type = data.get("user_type", "user")
-        allowed_types = ["user", "admin", "super_admin"]
+        allowed_types = ["user", "customer", "admin", "super_admin"]
         if user_type not in allowed_types:
             return jsonify({"error": "Invalid user type", "message": None}), 400
         if user_type in ["admin", "super_admin"]:
@@ -42,11 +41,11 @@ def register():
         hashed_password = bcrypt.generate_password_hash(data["password"]).decode("utf-8")
 
         new_user = User(
-            name=data["name"],        # Use lowercase 'name'
-            email=data["email"].lower(),  # Use lowercase 'email'
-            phone=data["phone"],      # Use lowercase 'phone'
-            password_hash=hashed_password,  # Corrected to 'password_hash'
-            user_type=user_type       # Use lowercase 'user_type'
+            name=data["name"],
+            email=data["email"].lower(),
+            phone=data["phone"],
+            password_hash=hashed_password,
+            user_type=user_type
         )
 
         db.session.add(new_user)
@@ -60,26 +59,35 @@ def register():
     except Exception as e:
         return jsonify({"error": f"Unexpected error: {str(e)}", "message": None}), 500
 
-# User Login
 @auth_bp.route("/login", methods=["POST"])
 def login():
     try:
         data = request.get_json()
+        print(f"Received data: {data}")
         if not data:
+            print("No data provided")
             return jsonify({"error": "No data provided", "message": None}), 400
 
         email = data.get("email", "").strip().lower()
         password = data.get("password", "").strip()
+        print(f"Email: {email}, Password: {'*' * len(password)}")
 
         if not email or not password:
+            print("Email or password missing")
             return jsonify({"error": "Email and password are required", "message": None}), 400
 
-        user = User.query.filter_by(email=email).first()  # Use lowercase 'email'
-        
-        if not user or not bcrypt.check_password_hash(user.password_hash, password):  # Corrected to 'password_hash'
+        user = User.query.filter_by(email=email).first()
+        print(f"User found: {user}")
+        if not user:
+            print("User not found")
             return jsonify({"error": "Invalid email or password", "message": None}), 401
 
-        access_token = create_access_token(identity={"user_id": user.user_id, "user_type": user.user_type})  # Use lowercase
+        if not bcrypt.check_password_hash(user.password_hash, password):
+            print("Password mismatch")
+            return jsonify({"error": "Invalid email or password", "message": None}), 401
+
+        access_token = create_access_token(identity={"user_id": user.user_id, "user_type": user.user_type})
+        print(f"Token generated: {access_token}")
         return jsonify({
             "message": "Login successful",
             "token": access_token,
@@ -87,7 +95,14 @@ def login():
             "error": None
         }), 200
 
+    except ValueError as ve:
+        print(f"ValueError: {str(ve)}")
+        return jsonify({"error": f"Invalid input: {str(ve)}", "message": None}), 400
+    except SQLAlchemyError as se:
+        print(f"SQLAlchemyError: {str(se)}")
+        return jsonify({"error": f"Database error: {str(se)}", "message": None}), 500
     except Exception as e:
+        print(f"Unexpected error: {str(e)}")
         return jsonify({"error": f"Unexpected error: {str(e)}", "message": None}), 500
 
 # Get All Users (Only for Admin & Super Admin)

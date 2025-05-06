@@ -1,4 +1,3 @@
-from flask_sqlalchemy import SQLAlchemy
 from laphic_app.extensions import db
 
 class Provider(db.Model):
@@ -11,19 +10,18 @@ class Provider(db.Model):
     Address = db.Column(db.String(200), nullable=True)
     Password = db.Column(db.String(100), nullable=False)
 
-    # Relationships
     messages_sent = db.relationship(
         'Message',
         foreign_keys='Message.sender_id',
         primaryjoin="and_(Provider.Provider_ID == Message.sender_id, Message.sender_type == 'provider')",
-        backref='sender_provider',
+        back_populates='sender_provider',
         lazy='dynamic'
     )
     messages_received = db.relationship(
         'Message',
         foreign_keys='Message.recipient_id',
         primaryjoin="and_(Provider.Provider_ID == Message.recipient_id, Message.recipient_type == 'provider')",
-        backref='recipient_provider',
+        back_populates='recipient_provider',
         lazy='dynamic'
     )
 
