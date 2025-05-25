@@ -1,26 +1,4 @@
-# from datetime import datetime
-# from laphic_app.extensions import db
 
-# class Feedback(db.Model):
-#     __tablename__ = 'feedbacks'
-
-#     Feedback_ID = db.Column(db.Integer, primary_key=True)
-#     User_ID = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-#     Rating = db.Column(db.Float, nullable=False)
-#     Comment = db.Column(db.Text, nullable=True)
-#     Feedback_Date = db.Column(db.DateTime, default=datetime.utcnow)
-
-
-#     def __init__(self, User_ID, Rating, Comment, Feedback_Date=None):
-#         self.User_ID = User_ID
-#         self.Rating = Rating
-#         self.Comment = Comment
-#         if Feedback_Date:
-#             self.Feedback_Date = Feedback_Date
-
-
-#     def __repr__(self):
-#         return f"<Feedback {self.Feedback_ID}>"
 
 
 
@@ -31,7 +9,7 @@ class Feedback(db.Model):
     __tablename__ = 'feedbacks'
 
     feedback_id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(128), db.ForeignKey('users.user_id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), nullable=False)
     comment = db.Column(db.Text, nullable=False)

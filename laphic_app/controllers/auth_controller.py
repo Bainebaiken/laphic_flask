@@ -206,3 +206,47 @@ def delete_user(user_id):
         return jsonify({"error": f"Database error: {str(e)}", "message": None}), 500
     except Exception as e:
         return jsonify({"error": f"Unexpected error: {str(e)}", "message": None}), 500
+    
+
+# Create Admin/Super Admin (Only for existing Admin or Super Admin)
+@auth_bp.route("/create-admin", methods=["POST"])
+@jwt_required()
+def create_admin_user():
+    try:
+        current_user = get_jwt_identity()
+        if current_user["user_type"] not in ["admin", "super_admin"]:
+            return jsonify({"error": "Unauthorized to create admin/super_admin"}), 403
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        required_fields = ["name", "email", "phone", "password", "user_type"]
+        if not all(field in data and data[field] for field in required_fields):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        if data["user_type"] not in ["admin", "super_admin"]:
+            return jsonify({"error": "Only 'admin' or 'super_admin' allowed for this endpoint"}), 400
+
+        if User.query.filter_by(email=data["email"].lower()).first():
+            return jsonify({"error": "Email already exists"}), 400
+
+        hashed_password = bcrypt.generate_password_hash(data["password"]).decode("utf-8")
+        new_user = User(
+            name=data["name"],
+            email=data["email"].lower(),
+            phone=data["phone"],
+            password_hash=hashed_password,
+            user_type=data["user_type"]
+        )
+
+        db.session.add(new_user)
+        db.session.commit()
+
+        return jsonify({"message": f"{data['user_type']} created successfully", "user": new_user.to_dict()}), 201
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500

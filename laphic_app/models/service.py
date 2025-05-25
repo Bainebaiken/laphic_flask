@@ -7,8 +7,7 @@ class Service(db.Model):
     Service_ID = db.Column(db.Integer, primary_key=True)
     Name = db.Column(db.String(100), nullable=False)
     Category = db.Column(db.String(50), nullable=False)
-    Description = db.Column(db.Text, nullable=True)
-    Cost = db.Column(db.Float, nullable=False)
+    Image_URL = db.Column(db.String(255), nullable=True)
 
     # Relationships
     bookings = db.relationship('Booking', backref='service', lazy=True)
