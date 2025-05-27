@@ -2,6 +2,7 @@
 
 from laphic_app.extensions import db
 
+
 class User(db.Model):
     __tablename__ = 'users'
 
@@ -11,6 +12,7 @@ class User(db.Model):
     phone = db.Column(db.String(20), nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
     user_type = db.Column(db.String(20), default='user')
+    profile_image = db.Column(db.String(255), nullable=True)  # Added, optional field
 
     # Fixed relationships
     messages_sent = db.relationship(
@@ -27,6 +29,7 @@ class User(db.Model):
         back_populates='recipient_user',
         lazy='dynamic'
     )
+    bookings = db.relationship('Booking', backref='user', lazy=True)
 
     def __repr__(self):
         return f"<User {self.name}>"
@@ -37,5 +40,6 @@ class User(db.Model):
             'name': self.name,
             'email': self.email,
             'phone': self.phone,
-            'user_type': self.user_type
+            'user_type': self.user_type,
+            'profile_image': self.profile_image  # Added to return profile image in API responses
         }

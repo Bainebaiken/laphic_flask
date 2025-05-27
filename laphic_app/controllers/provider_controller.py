@@ -119,7 +119,7 @@ def login():
         return jsonify({'error': 'Failed to login', 'details': str(e)}), 500
 
 # Get all providers (Admin or Superadmin)
-@provider_bp.route('/', methods=['GET'])
+@provider_bp.route('/all', methods=['GET'])
 @admin_or_superadmin_required
 def get_all_providers():
     try:
